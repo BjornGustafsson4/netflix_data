@@ -1,0 +1,14 @@
+# created by virtualenv automatically
+*
+
+*.txt
+
+/netflix-report
+
+!.gitignore
+
+!README.md
+
+!.gitattributes
+
+!netflix_data.py
