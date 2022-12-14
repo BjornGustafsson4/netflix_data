@@ -3,6 +3,8 @@
 
 *.txt
 
+*.html
+
 /netflix-report
 
 !.gitignore
