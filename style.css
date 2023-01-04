@@ -1,11 +1,16 @@
-* {
+body {
     box-sizing: border-box;
     padding: 0;
-    margin: 0;
+    margin: 2;
 }
 
-body, embed {
-    text-align: center;
-    width: 100%;
-    height: 600px;
+embed {
+    text-align: left;
+    width: 60em;
+    height: 40em;
+}
+
+p {
+    padding: 1em 2.3em .1em;
+    font-size: 1.1em;
 }
