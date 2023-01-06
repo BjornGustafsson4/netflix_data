@@ -15,13 +15,13 @@ timezone = dt.datetime.utcnow().astimezone().utcoffset().total_seconds()
 
 for name in name_list:
     netflix_csv_partial = netflix_csv[netflix_csv["Profile Name"] == name]
-    illegalCharacter = ["\\", "/", "|", ",", ":", "#", '"', "?", "<", ">", "*"]
-    characterList = []
+    illegal_character = ["\\", "/", "|", ",", ":", "#", '"', "?", "<", ">", "*"]
+    character_list = []
     for character in list(name):
-        if character not in illegalCharacter:
-            characterList.append(character)
-    name = "".join(characterList)
-    character.replace(" ", "_")
+        if character not in illegal_character:
+            character_list.append(character)
+    name = "".join(character_list)
+    name.replace(" ", "_")
     
     #Gets hours from datetime directly from csv and converts from UTC to EST, as well pulls dates
     times = []
@@ -53,34 +53,20 @@ for name in name_list:
 
 
 
-    #produces a bar graph for hours
-    bar_time = []
-    day_ex = []
-    for row in netflix_df_filtered.index:
-        bt = str(netflix_df_filtered["time"][row]).split(":")[0]
-        bar_time.append(bt)
-        t = pd.to_timedelta(netflix_df_filtered["duration"][row])
-        check = netflix_df_filtered["time"][row] + t 
-        day, check = str(check).rsplit(" ", 1)
-        check = check.split(":")[0]
-        check = check.replace("+", "")
-        day_ex.append(netflix_df_filtered["day_of_week"][row])
-        if check != bt:
-            bar_time.append(check)
-        if day != "0 days":
-            day_ex.append(dt.datetime.date((dt.datetime.strptime(netflix_df_filtered['day_of_week'][row], '%Y-%m-%d') + pd.to_timedelta(day))))
+    #produces a bar graph for hours both episodes and movies
+    bar_time, day_ex = nf.checker(netflix_df_filtered)
     bar_count = pd.Series(bar_time).value_counts()
     hour_df = bar_count.to_frame()
     hour_df = hour_df.sort_index(ascending = True)
     hour_bar = px.bar(hour_df, 
                             title = f"{name}'s Netflix viewed by hour",
                             labels = dict(index = f"Hours in a day in {timezone_name}", 
-                            value = "Shows and movies watched"),
+                            value = "Episodes and movies watched"),
                             text_auto = True,)
     hour_bar.update_layout(showlegend=False)
 
 
-    #produces a bar graph for days of week
+    #produces a bar graph for days of week both episodes and movies
     day_of_week = []
     for dates in day_ex:
         d = pd.Timestamp(dates)
@@ -95,6 +81,22 @@ for name in name_list:
                         text_auto = True)
     date_bar.update_layout(showlegend=False)
 
+    #produces a bar graph for only movies for days of week
+    bar_time, day_ex = nf.checker(netflix_df_movies)
+    day_of_week = []
+    for dates in day_ex:
+        d = pd.Timestamp(dates)
+        day_of_week.append(f"{d.day_of_week} {d.day_name()}")
+    date_s = pd.Series(day_of_week).value_counts()
+    date_df = date_s.to_frame()
+    date_df = date_df.sort_index(ascending = True)
+    movie_bar = px.bar(date_df, 
+                        title = f"Movies {name} viewed by day of the week", 
+                        labels = dict(index = "Days of the Week", 
+                        value = "Amount viewed"),
+                        text_auto = True)
+    movie_bar.update_layout(showlegend=False)
+
 
     #Histogram of movies vs shows watched by month
     len_total = netflix_df_filtered["date"].unique()
@@ -108,7 +110,7 @@ for name in name_list:
     his_fig = go.Figure(data=[
         go.Bar(name = "Shows watched", x = watch['year_month'], y = watch['show_amount']),
         go.Bar(name = "Movies watched", x=watch['year_month'], y=watch['movie_amount'])])
-    his_fig.update_layout(barmode="overlay", title= f"{name}'s watched shows and movies per month")
+    his_fig.update_layout(barmode="overlay", title= f"{name}'s watched episodes and movies per month")
 
 
     #Find the shows watched in the most watched month
@@ -116,9 +118,8 @@ for name in name_list:
     shows_max = netflix_df_shows.loc[netflix_df_shows["date"] == str(watch_max["year_month"].iloc[0])]
     shows_max_watched = pd.Series(nf.title_cleaner(shows_max["title"])).value_counts()
     d= f"{dt.datetime.strptime(watch_max['year_month'].iloc[0], '%Y-%m').strftime('%B')} {dt.datetime.strptime(watch_max['year_month'].iloc[0], '%Y-%m').strftime('%Y')}"
-    shows_max_par = f"In {d}, {name} watched {sum(shows_max_watched.values)} shows that breaks down to: <br> {shows_max_watched}"
+    shows_max_par = f"In {d}, {name} watched {sum(shows_max_watched.values)} episodes that breaks down to: <br> {shows_max_watched}"
     shows_max_par = shows_max_par.replace("dtype: int64", "")
-    print(shows_max_par)
 
 
     #Find the average of shows and movies watched
@@ -126,7 +127,7 @@ for name in name_list:
     end_d = dt.datetime.strptime(watch['year_month'].iloc[0], "%Y-%m")
     show_avg = sum(watch["show_amount"])/int((end_d.year - start_d.year) * 12 + (end_d.month - start_d.month))
     show_avg = round(show_avg, 1)
-    show_avg_par = f"{name} watched an average of {show_avg} shows per month"
+    show_avg_par = f"{name} watched an average of {show_avg} episodes per month"
     movie_avg = sum(watch["movie_amount"])/int((end_d.year - start_d.year) * 12 + (end_d.month - start_d.month))
     movie_avg = round(movie_avg, 2)
     movie_avg_par = f"{name} watched an average of {movie_avg} movies per month"
@@ -135,12 +136,17 @@ for name in name_list:
     #Makes pie graph for top 15 shows
     netflix_df_shows["title_short"] = nf.title_cleaner(netflix_df_shows["title"])
     shows_title = netflix_df_shows["title_short"].value_counts()
-    shows_data = {"title":shows_title.index, "value":shows_title}
-    shows_df = pd.DataFrame(shows_data)
+    shows_df = pd.DataFrame({"title":shows_title.index, "value":shows_title})
     shows_df = shows_df.reset_index()
     shows_df = shows_df.iloc[:15]
-    show_pie = px.pie(shows_df, values="value", names="title", title=f"{name}'s top 15 watched shows", hole=.6)
-
+    print(shows_df)
+    for show in shows_df.index:
+        print(f"A {shows_df['title'][show]}")
+        if str(shows_df['title'][show]).endswith(": "):
+            show_new= str(shows_df["title"][show]).rsplit(': ', 1)[0]
+            shows_df["title"][show] = show_new
+            print(shows_df["title"][show])
+    show_pie = px.pie(shows_df, values="value", names="title", title=f"{name}'s top 15 watched shows", hole=.6, color_discrete_sequence=px.colors.cyclical.Edge)
 
     #Save graphs in folder
     graph_cwd = f"{cwd}\\graphs"
@@ -154,12 +160,13 @@ for name in name_list:
             os.mkdir(graph_cwd_person)
     hour_bar.write_html(f"{graph_cwd_person}\\hour_viewed.html")
     date_bar.write_html(f"{graph_cwd_person}\\day_viewed.html")
+    movie_bar.write_html(f"{graph_cwd_person}\\movie_day_viewed.html")
     his_fig.write_html(f"{graph_cwd_person}\\histogram_shows_movies.html")
     show_pie.write_html(f"{graph_cwd_person}\\most_watched_shows.html")
 
 
     #creates a new HTML file to run all individual graphs on one page
     html_graphs = open(f"{graph_cwd_person}\\{name}_index.html", "w")
-    html_graphs.write(f"<html lang='en'>\n<head>\n<meta charset='utf-8'>\n<link rel='stylesheet' href='{cwd}\\style.css'>\n<title>{name}'s graphs</title>\n</head>\n<body>\n<embed type='text/html' src='day_viewed.html' width='900' height='600'>\n<embed type='text/html' src='hour_viewed.html' width='900' height='600'>\n<embed type='text/html' src='histogram_shows_movies.html' width='900' height='600'>\n<p>\n{shows_max_par}</p>\n<p>\n{movie_avg_par}</p>\n<p>\n{show_avg_par}</p>\n<embed type='text/html' src='most_watched_shows.html' width='900' height='600'>\n</body>\n</html>")
+    html_graphs.write(f"<html lang='en'>\n<head>\n<meta charset='utf-8'>\n<link rel='stylesheet' href='{cwd}\\style.css'>\n<title>{name}'s graphs</title>\n</head>\n<body>\n<embed type='text/html' src='day_viewed.html' width='900' height='600'>\n<embed type='text/html' src='movie_day_viewed.html' width='900' height='600'>\n<embed type='text/html' src='hour_viewed.html' width='900' height='600'>\n<embed type='text/html' src='histogram_shows_movies.html' width='900' height='600'>\n<p>\n{shows_max_par}</p>\n<p>\n{movie_avg_par}</p>\n<p>\n{show_avg_par}</p>\n<embed type='text/html' src='most_watched_shows.html' width='900' height='600'>\n</body>\n</html>")
     html_graphs.close()
     os.system(f"{graph_cwd_person}\\{name}_index.html")
